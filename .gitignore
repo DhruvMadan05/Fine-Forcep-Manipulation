@@ -1,0 +1,5 @@
+.env
+adf/generated/
+__pycache__/
+*.pyc
+.vscode/

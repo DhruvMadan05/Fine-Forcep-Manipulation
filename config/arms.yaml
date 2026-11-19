@@ -1,0 +1,36 @@
+# Declares which dVRK arms get spawned for the dev/smoke-test sim.
+#
+# source_model must match an AMBF stock ADF at
+#   $AMBF_WS/src/ambf/core/ambf_models/descriptions/multi-bodies/robots/blender-<source_model>.yaml
+#
+# world_offset is added to every body's absolute world position in the stock
+# ADF, so two copies of the same model don't spawn on top of each other.
+# namespace must be unique per arm; generate_adfs.py uses it to produce the
+# generated ADF. root_body is the stock ADF's root BODY name (as written in
+# its "bodies:" list, without the "BODY " prefix) - joint_sweep_test.py
+# derives the client-visible object name from "<name>/<root_body with
+# spaces stripped>", matching how AMBF publishes topic names.
+arms:
+  - name: psm1
+    source_model: psm
+    root_body: "base link"
+    namespace: /ambf/env/psm1/
+    world_offset: {x: 0.0, y: 0.0, z: 0.0}
+
+  - name: psm2
+    source_model: psm
+    root_body: "base link"
+    namespace: /ambf/env/psm2/
+    world_offset: {x: 0.0, y: 1.0, z: 0.0}
+
+  - name: mtm1
+    source_model: mtm
+    root_body: "Top Panel"
+    namespace: /ambf/env/mtm1/
+    world_offset: {x: 0.0, y: 0.0, z: 0.0}
+
+  - name: mtm2
+    source_model: mtm
+    root_body: "Top Panel"
+    namespace: /ambf/env/mtm2/
+    world_offset: {x: 0.0, y: 1.0, z: 0.0}
