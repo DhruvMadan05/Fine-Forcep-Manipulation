@@ -1,0 +1,48 @@
+# FFM Challenge Task 1 - needle L-bracket (static fixture).
+#
+# Mesh paths below are relative to THIS file's directory (AMBF resolves them
+# that way), so this ADF works from any clone of the repo without edits.
+#
+# The source STL is authored in millimetres (bounds ~70 x 70 x 65 mm, origin
+# at the inside corner of the L, base on z=0), hence scale 0.001 -> metres.
+#
+# mass 0.0 makes it a static body (fixed in the world, not affected by
+# gravity/contacts). With no "collision shape" given, AMBF builds a
+# triangle-mesh collider from the low-res mesh, which is fine for a static
+# body.
+#
+# Placement: directly under psm1's tool tip at its zero pose (tip is at
+# z ~ -0.686), with the top of the bracket ~0.1 m below the tip so it is
+# reachable with moderate insertion. Adjust "location" as the task layout
+# evolves.
+bodies: [BODY Needle L Bracket]
+joints: []
+high resolution path: ../../meshes/task1/
+low resolution path: ../../meshes/task1/
+ignore inter-collision: false
+namespace: /ambf/env/task1/
+
+BODY Needle L Bracket:
+  name: Needle L Bracket
+  mesh: IROS_FFM_Needle_L_Bracket.stl
+  mass: 0.0
+  collision margin: 0.0005
+  scale: 0.001
+  location:
+    position: {x: 0.5, y: 0.5141, z: -0.85}
+    orientation: {r: 0.0, p: 0.0, y: 0.0}
+  inertial offset:
+    position: {x: 0.0, y: 0.0, z: 0.0}
+    orientation: {r: 0, p: 0, y: 0}
+  publish children names: false
+  publish joint names: false
+  publish joint positions: false
+  friction: {rolling: 0.01, static: 0.5}
+  restitution: 0.1
+  damping: {angular: 0.1, linear: 0.5}
+  collision groups: [0]
+  color components:
+    ambient: {level: 1.0}
+    diffuse: {r: 0.63, g: 0.63, b: 0.63}
+    specular: {r: 1.0, g: 1.0, b: 1.0}
+    transparency: 1.0
