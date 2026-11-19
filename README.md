@@ -43,11 +43,24 @@ machine-specific gets committed.
 - `scripts/generate_adfs.py` — reads `config/arms.yaml` and the stock
   `blender-psm.yaml` / `blender-mtm.yaml` ADFs from `$AMBF_WS`, and writes
   out `adf/generated/{psm1,psm2,mtm1,mtm2}.yaml`: copies with a unique
-  namespace, an offset world position, and mesh paths resolved to absolute
-  paths (since the generated files live outside the AMBF models tree).
-  `adf/generated/` is gitignored and regenerated per machine.
+  namespace, an offset world position, and mesh paths rewritten to go
+  through an `adf/generated/ambf_models` symlink that points at
+  `$AMBF_WS/src/ambf/core/ambf_models`. AMBF resolves mesh paths relative
+  to the ADF and doesn't expand env vars, so this keeps the generated YAML
+  free of machine-specific paths: `AMBF_WS` in `.env` is the only place
+  your workspace location lives, and the symlink is recreated from it on
+  every run. `adf/generated/` is gitignored and regenerated per machine.
+- `adf/task1/needle_bracket.yaml` — static-body ADF for the FFM Task 1
+  needle L-bracket. Committed (not generated): its mesh path
+  (`../../meshes/task1/`) is relative to the ADF file itself, which is how
+  AMBF resolves it, so it works from any clone. The STL is authored in mm,
+  so the ADF uses `scale: 0.001`. It's placed under psm1's tool tip; edit
+  `location` in the ADF to move it.
+- `meshes/task1/` — Task 1 meshes (currently
+  `IROS_FFM_Needle_L_Bracket.stl`).
 - `scripts/launch_sim.sh` — regenerates the ADFs and launches
-  `ambf_simulator` with all 4 arms loaded. Extra args are passed through to
+  `ambf_simulator` with all 4 arms plus the Task 1 scene ADFs loaded. To add
+  more scene objects, append their ADF to `SCENE_ADFS` in that script. Extra args are passed through to
   `ambf_simulator` (e.g. `-g 0` to run headless).
 - `scripts/joint_sweep_test.py` — the joint-moving smoke test: connects to
   a running simulator, finds each of the 4 arms, and for every joint it
@@ -101,6 +114,6 @@ doesn't respond.
 - Teleoperation mapping: wire `mtm1 -> psm1` and `mtm2 -> psm2` Cartesian
   pose so real/simulated MTMs can drive the PSMs (the user eventually wants
   to use real MTM hardware as input into this sim).
-- Modified Task 1 environment: needle holder + needle ADFs for the
-  simulated version of needle threading, and the motion/task planning on
-  top of it.
+- Modified Task 1 environment: the needle L-bracket is in; still needed
+  are the needle ADF(s) for the simulated version of needle threading, and
+  the motion/task planning on top of it.

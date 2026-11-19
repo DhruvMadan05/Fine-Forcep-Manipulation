@@ -6,8 +6,14 @@ Each generated ADF is a copy of the stock blender-<source_model>.yaml with:
   - a unique "namespace" (so the 4 arms don't collide on ROS topics)
   - every body's world position shifted by "world_offset" (so they don't
     spawn on top of each other)
-  - "high/low resolution path" rewritten to an absolute path, since the
-    generated file lives outside the AMBF models tree
+  - "high/low resolution path" rewritten to go through the
+    adf/generated/ambf_models symlink (-> $AMBF_WS/.../ambf_models), since
+    the generated file lives outside the AMBF models tree
+
+AMBF resolves mesh paths relative to the ADF file and does not expand
+environment variables, so the symlink is what keeps the generated ADFs free
+of machine-specific paths: the only place the AMBF location lives is
+AMBF_WS in .env, and the symlink is recreated from it on every run.
 
 Run directly to (re)generate everything; prints the comma-separated list of
 generated file paths on the last line of stdout, for use by launch_sim.sh.
@@ -21,6 +27,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GENERATED_DIR = REPO_ROOT / "adf" / "generated"
+MODELS_LINK_NAME = "ambf_models"
 
 
 def get_ambf_ws() -> Path:
@@ -34,8 +41,27 @@ def get_ambf_ws() -> Path:
     return ambf_ws
 
 
+def ambf_models_dir(ambf_ws: Path) -> Path:
+    return ambf_ws / "src" / "ambf" / "core" / "ambf_models"
+
+
+def link_ambf_models(ambf_ws: Path, out_dir: Path) -> Path:
+    """(Re)create out_dir/ambf_models -> $AMBF_WS/.../ambf_models."""
+    target = ambf_models_dir(ambf_ws)
+    if not target.is_dir():
+        sys.exit(f"ERROR: AMBF models dir not found: {target}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    link = out_dir / MODELS_LINK_NAME
+    if link.is_symlink():
+        link.unlink()
+    elif link.exists():
+        sys.exit(f"ERROR: {link} exists and is not a symlink; remove it and re-run.")
+    link.symlink_to(target, target_is_directory=True)
+    return link
+
+
 def stock_model_path(ambf_ws: Path, source_model: str) -> Path:
-    path = (ambf_ws / "src" / "ambf" / "core" / "ambf_models" / "descriptions"
+    path = (ambf_models_dir(ambf_ws) / "descriptions"
             / "multi-bodies" / "robots" / f"blender-{source_model}.yaml")
     if not path.exists():
         sys.exit(f"ERROR: stock ADF not found: {path}")
@@ -63,10 +89,18 @@ def generate_one(ambf_ws: Path, arm: dict, out_dir: Path) -> Path:
         doc = yaml.safe_load(f)
 
     src_dir = src_path.parent
+    models_root = ambf_models_dir(ambf_ws).resolve()
     for key in ("high resolution path", "low resolution path"):
         rel = doc.get(key)
         if rel:
-            doc[key] = str((src_dir / rel).resolve()) + "/"
+            mesh_dir = (src_dir / rel).resolve()
+            try:
+                inside = mesh_dir.relative_to(models_root)
+            except ValueError:
+                sys.exit(f"ERROR: {src_path} '{key}' points outside {models_root}: {mesh_dir}")
+            # Relative to the generated ADF (AMBF resolves it that way),
+            # routed through the ambf_models symlink next to it.
+            doc[key] = f"{MODELS_LINK_NAME}/{inside.as_posix()}/"
 
     overwrite_namespaces(doc, arm["namespace"])
 
@@ -100,6 +134,7 @@ def main():
         arms = yaml.safe_load(f)["arms"]
 
     out_dir = Path(args.out_dir)
+    link_ambf_models(ambf_ws, out_dir)
     generated = []
     for arm in arms:
         out_path = generate_one(ambf_ws, arm, out_dir)
