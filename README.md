@@ -43,9 +43,13 @@ machine-specific gets committed.
 - `scripts/generate_adfs.py` — reads `config/arms.yaml` and the stock
   `blender-psm.yaml` / `blender-mtm.yaml` ADFs from `$AMBF_WS`, and writes
   out `adf/generated/{psm1,psm2,mtm1,mtm2}.yaml`: copies with a unique
-  namespace, an offset world position, and mesh paths resolved to absolute
-  paths (since the generated files live outside the AMBF models tree).
-  `adf/generated/` is gitignored and regenerated per machine.
+  namespace, an offset world position, and mesh paths rewritten to go
+  through an `adf/generated/ambf_models` symlink that points at
+  `$AMBF_WS/src/ambf/core/ambf_models`. AMBF resolves mesh paths relative
+  to the ADF and doesn't expand env vars, so this keeps the generated YAML
+  free of machine-specific paths: `AMBF_WS` in `.env` is the only place
+  your workspace location lives, and the symlink is recreated from it on
+  every run. `adf/generated/` is gitignored and regenerated per machine.
 - `adf/task1/needle_bracket.yaml` — static-body ADF for the FFM Task 1
   needle L-bracket. Committed (not generated): its mesh path
   (`../../meshes/task1/`) is relative to the ADF file itself, which is how
