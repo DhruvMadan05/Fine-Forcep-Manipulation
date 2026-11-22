@@ -8,6 +8,14 @@ bracket:
   world_pose:
     position: {x: 0.5, y: 0.5141, z: -0.85}
     orientation: {r: 0.0, p: 0.0, y: 0.0}
+  base_z: 0.0
+collision_boxes:
+- name: plate_x
+  min: [-0.02, -0.05, 0.0]
+  max: [-0.016, 0.02, 0.065]
+- name: plate_y
+  min: [-0.02, 0.016, 0.0]
+  max: [0.05, 0.02, 0.065]
 targets:
 - id: plate_x_hole_000
   type: hole

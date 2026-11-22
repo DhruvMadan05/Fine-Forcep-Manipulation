@@ -69,6 +69,34 @@ machine-specific gets committed.
   that comms and joint control are wired up correctly for all 4 arms — it
   is not a task or teleoperation script.
 
+## PSM reachability analysis (pure math)
+
+`scripts/reachability/` finds where to put a PSM so it can reach the Task 1
+bracket: the inside corner and every hole, approached from the inside. It
+uses only the bracket geometry and the dVRK kinematics — no simulator.
+
+- `extract_bracket_targets.py` — reads the bracket STL and writes
+  `config/task1_targets.yaml`: the 421 holes (centre on the inner face +
+  outward hole axis), points along the inside corner edge, and box
+  collision proxies for the two plates.
+- `psm_kinematics.py` — dVRK PSM + Large Needle Driver kinematics from
+  the DH table and joint limits in `config/psm_kinematics.yaml` (values from
+  jhu-dvrk/sawIntuitiveResearchKit), with batched IK for "jaw tip on a point,
+  jaw axis within a cone of a direction". Run it for a self-check.
+- `place_psm.py` — searches the RCM position + yaw + tilt (differential
+  evolution) to maximise corner/hole coverage, then joint-limit margin,
+  with tool-vs-plate/table collision checks. Parameters (approach cone,
+  minimum insertion, margins, search bounds) are in `config/reachability.yaml`.
+  Results go to `results/reachability/<name>/` (`placement.yaml`,
+  per-target `targets.csv`, `coverage.png`).
+
+```bash
+python3 scripts/reachability/place_psm.py --name psm1 --max-tilt-deg 30
+```
+
+Not modelled yet: the PSM's own linkage (only the tool shaft/wrist are
+collision-checked), and a second PSM.
+
 ## Running the smoke test
 
 Terminal 1 — launch the simulator (GUI on by default):

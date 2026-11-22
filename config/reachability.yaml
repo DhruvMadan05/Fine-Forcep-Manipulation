@@ -1,0 +1,46 @@
+# Parameters for scripts/reachability/place_psm.py (PSM placement search
+# for the Task 1 bracket targets in config/task1_targets.yaml).
+
+# Jaw axis must lie within this cone of each target's approach direction.
+approach_cone_deg: 20.0
+
+# A target counts as reached when the IK jaw-tip error is below this.
+position_tolerance_m: 0.0005
+
+# Minimum insertion depth (m). The sim has no cannula, but on a real PSM the
+# wrist must be clear of the cannula; raise this to be more conservative.
+min_insertion_m: 0.04
+
+# Joints are kept this far inside their ADF limits (rad; m for insertion is
+# not affected - use min_insertion_m / the ADF's 0.24 m max).
+joint_limit_margin_rad: 0.05
+
+# Collision model: tool shaft radius (RCM -> wrist) and wrist/jaw radius,
+# inflated against the plate boxes. The last `tip_clearance_m` of the jaws
+# is excluded so touching the target surface isn't counted as a collision.
+shaft_radius_m: 0.0042
+wrist_radius_m: 0.0025
+tip_clearance_m: 0.003
+# Keep the RCM at least this far from the plates / table.
+rcm_clearance_m: 0.02
+
+# Objective = corner_weight * corner_fraction + hole_fraction
+#             + margin_weight * mean joint-limit margin of reached targets
+corner_weight: 2.0
+margin_weight: 0.02
+
+# Search space for the PSM RCM pose, in the bracket frame (pure math).
+# Orientation of the RCM frame:
+#   R = Rz(yaw) * Ry(tilt_y) * Rx(tilt_x), untilted = z-up, tool pointing down
+search:
+  position_min: [-0.30, -0.30, 0.00]
+  position_max: [ 0.30,  0.30, 0.30]
+  yaw_deg: [-180, 180]
+  tilt_x_deg: [-70, 70]
+  tilt_y_deg: [-70, 70]
+  # Coarse search uses every Nth hole (plus all corner points) for speed;
+  # the final placement is always evaluated on every target.
+  hole_subsample: 3
+  popsize: 20
+  maxiter: 60
+  seed: 0

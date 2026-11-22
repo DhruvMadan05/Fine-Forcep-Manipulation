@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Record PSM joint configurations and the resulting tool-link poses from a
-running ambf_simulator, for calibrating/validating psm_kinematics.py.
+running ambf_simulator. NOT used by the (pure-math) reachability analysis;
+kept for comparing the dVRK DH model against the AMBF PSM when the chosen
+placement is tested in simulation.
 
 Two kinds of samples are recorded:
   * calibration - the all-zero pose, then each joint on its own at +/-delta
