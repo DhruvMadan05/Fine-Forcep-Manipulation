@@ -82,11 +82,6 @@ def dh_modified(alpha, a, theta, d):
                      [0, 0, 0, 1.0]])
 
 
-def rpy_to_R(r, p, y):
-    """AMBF 'orientation: {r, p, y}' = fixed-axis XYZ roll-pitch-yaw."""
-    return Rotation.from_euler("xyz", [r, p, y]).as_matrix()
-
-
 # ----------------------------------------------------------------------------
 # Model
 # ----------------------------------------------------------------------------
@@ -213,7 +208,6 @@ class PSMKinematics:
                 tgt_axis = _project_into_cone(axis, a, cone)
                 # orientation error: rotate axis onto tgt_axis (2-DOF, roll free)
                 w_err = np.cross(axis, tgt_axis)
-                # space-frame twist relating tip velocity: v_tip = v_s + w x tip
                 pos_err = tip - cur_tip
                 # Task Jacobian rows for [w (3), v_tip (3)]:
                 # v_tip = v_s + w x p_tip  ->  Jv_tip = Jv_s - [p_tip]x Jw
@@ -256,7 +250,7 @@ class PSMKinematics:
         wrist_target = tip - (self.jaw_length + 0.009) * a
         q[:, 2] = np.clip(np.linalg.norm(wrist_target - self.rcm, axis=1), *limits[2])
         for _ in range(15):
-            J, T = self.space_jacobian(q)
+            J, _ = self.space_jacobian(q)
             _, wp, _ = self.shaft_points(q)
             e = wrist_target - wp
             Jv = (J[:, 3:, :3] - skew(wp) @ J[:, :3, :3])

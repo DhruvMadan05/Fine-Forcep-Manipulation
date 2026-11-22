@@ -2,16 +2,7 @@
 # Regenerate the per-arm ADFs and launch ambf_simulator with psm1, psm2,
 # mtm1, mtm2 plus the Task 1 scene objects (needle L-bracket) loaded. Any
 # extra args are passed through to ambf_simulator.
-#
-#   --no-scene   load only the arms (e.g. for kinematic calibration, so the
-#                tool can't collide with the bracket). Must be the first arg.
 set -e
-
-LOAD_SCENE=1
-if [ "${1:-}" = "--no-scene" ]; then
-    LOAD_SCENE=0
-    shift
-fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/env.sh"
@@ -31,11 +22,7 @@ for adf in "${SCENE_ADFS[@]}"; do
 done
 SCENE_ADF_PATHS="$(IFS=,; echo "${SCENE_ADFS[*]}")"
 
-if [ "$LOAD_SCENE" = 1 ]; then
-    ADF_PATHS="$ARM_ADF_PATHS,$SCENE_ADF_PATHS"
-else
-    ADF_PATHS="$ARM_ADF_PATHS"
-fi
+ADF_PATHS="$ARM_ADF_PATHS,$SCENE_ADF_PATHS"
 
 echo "Launching ambf_simulator with: $ADF_PATHS"
 exec ambf_simulator -a "$ADF_PATHS" "$@"

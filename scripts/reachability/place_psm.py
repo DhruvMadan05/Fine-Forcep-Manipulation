@@ -84,22 +84,21 @@ def point_box_distance(p, boxes_min, boxes_max):
     return d
 
 
-def placement_R(params, R_stock=np.eye(3)):
+def placement_R(params):
     """params (..., 6) -> RCM-frame rotation in the bracket frame (..., 3, 3).
-    R_stock is the untilted reference (identity: RCM frame z-up, tool down)."""
+    Untilted (all angles 0) = RCM frame z-up with the tool pointing down."""
     params = np.atleast_2d(params)
     R = Rotation.from_euler("ZYX", np.deg2rad(params[:, 3:6])).as_matrix()  # Rz*Ry*Rx
-    return R @ R_stock
+    return R
 
 
 # ----------------------------------------------------------------------------
 # Problem
 # ----------------------------------------------------------------------------
 class PlacementProblem:
-    def __init__(self, cfg, targets_doc, model: PSMKinematics, R_stock, hole_subsample=1):
+    def __init__(self, cfg, targets_doc, model: PSMKinematics, hole_subsample=1):
         self.cfg = cfg
         self.model = model
-        self.R_stock = R_stock
         tg = targets_doc["targets"]
         holes = [t for t in tg if t["type"] == "hole"]
         corner = [t for t in tg if t["type"] == "corner"]
@@ -126,7 +125,7 @@ class PlacementProblem:
         cfg, model = self.cfg, self.model
         params = np.atleast_2d(params)
         P, N = len(params), len(self.targets)
-        R = placement_R(params, self.R_stock)              # (P, 3, 3) base->bracket
+        R = placement_R(params)              # (P, 3, 3) base->bracket
         t = params[:, :3]                                  # RCM = base origin
         # targets in each base frame
         pts_b = np.einsum("pji,pnj->pni", R, self.pts[None] - t[:, None])
@@ -300,19 +299,18 @@ def main():
     cfg = yaml.safe_load(Path(args.config).read_text())
     targets_doc = yaml.safe_load(Path(args.targets).read_text())
     model = PSMKinematics.load(args.model)
-    R_stock = np.eye(3)
     sc = cfg["search"]
     if args.max_tilt_deg is not None:
         sc["tilt_x_deg"] = sc["tilt_y_deg"] = [-args.max_tilt_deg, args.max_tilt_deg]
     out_dir = RESULTS_DIR / args.name
-    full = PlacementProblem(cfg, targets_doc, model, R_stock, hole_subsample=1)
+    full = PlacementProblem(cfg, targets_doc, model, hole_subsample=1)
 
     if args.evaluate:
         bf = yaml.safe_load(Path(args.evaluate).read_text())["bracket_frame"]
         best = np.array([bf[k] for k in PARAM_NAMES])
         search_info = {"evaluated_from": str(args.evaluate)}
     else:
-        coarse = PlacementProblem(cfg, targets_doc, model, R_stock,
+        coarse = PlacementProblem(cfg, targets_doc, model,
                                   hole_subsample=sc["hole_subsample"])
         bounds = list(zip(sc["position_min"], sc["position_max"])) + \
             [tuple(sc["yaw_deg"]), tuple(sc["tilt_y_deg"]), tuple(sc["tilt_x_deg"])]

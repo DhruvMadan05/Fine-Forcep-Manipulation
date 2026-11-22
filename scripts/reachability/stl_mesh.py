@@ -1,9 +1,8 @@
 """Minimal numpy-only STL utilities (no trimesh dependency).
 
 Provides binary/ASCII STL loading, mesh-connectivity components, and
-vectorised ray / segment casting against the triangles, which the
-reachability tools use both to locate bracket features and to check that
-the PSM tool shaft doesn't pass through the bracket.
+vectorised ray casting against the triangles, used to locate the bracket's
+holes and inside corner.
 """
 from pathlib import Path
 import struct
@@ -85,10 +84,3 @@ class TriMesh:
             hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > eps)
             out[s:s + chunk] = np.where(hit, t, np.inf).min(axis=1)
         return out
-
-    def segments_hit(self, a: np.ndarray, b: np.ndarray) -> np.ndarray:
-        """True for each segment a[i]->b[i] that crosses any triangle."""
-        a = np.atleast_2d(a)
-        b = np.atleast_2d(b)
-        t = self.ray_hits(a, b - a)
-        return t < 1.0

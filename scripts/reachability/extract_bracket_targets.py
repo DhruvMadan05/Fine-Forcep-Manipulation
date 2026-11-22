@@ -106,7 +106,7 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--stl", default=str(DEFAULT_STL))
     ap.add_argument("--adf", default=str(DEFAULT_ADF),
-                    help="Bracket ADF, used for the mesh scale and to record the bracket's world pose")
+                    help="Bracket ADF, used for the mesh scale")
     ap.add_argument("--out", default=str(DEFAULT_OUT))
     ap.add_argument("--corner-step-mm", type=float, default=5.0)
     ap.add_argument("--corner-margin-mm", type=float, default=2.5,
@@ -177,8 +177,6 @@ def main():
             "stl": str(Path(args.stl).resolve().relative_to(REPO_ROOT)),
             "adf": str(Path(args.adf).resolve().relative_to(REPO_ROOT)),
             "scale": scale,
-            "world_pose": {"position": body["location"]["position"],
-                           "orientation": body["location"]["orientation"]},
             "base_z": round(float(lo[2] * scale), 6),
         },
         "collision_boxes": boxes,
