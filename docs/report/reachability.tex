@@ -1,86 +1,66 @@
-% ============================================================================
-% PSM placement and reachability analysis (Task 1 needle L-bracket)
-% Included from report.tex with \input{reachability}.
-% Code: scripts/reachability/{psm_kinematics,place_psm}.py
-% Numbers: results/reachability/{psm1_tilt30,psm1}/placement.yaml
-% ============================================================================
 \section{PSM Placement and Reachability Analysis}\label{sec:reach}
 
-Because the PSM pivots about a remote center of motion (RCM), the set of
-tool poses available at a given target depends strongly on where the RCM is
-placed relative to the work piece. Before collecting teleoperation data, the
-group therefore chose a placement for the first PSM through a purely
-kinematic analysis. The analysis uses only the bracket CAD model and the
-published dVRK kinematics~\cite{kazanzides2014dvrk,sawIntuitive}; no
-simulation is involved. The requirement is that the jaw tip must reach
+The dVRK patient side manipulator (PSM) holds its tool on a long shaft that
+always pivots about one fixed point in space, the \emph{remote center of
+motion} (RCM). In surgery this point sits at the incision, so the robot never
+pushes sideways on the patient. The drawback is that the tool can only reach a
+target by coming in along a line through the RCM, so where the RCM is placed
+decides which targets the robot can reach, and from which directions.
+
+Before running anything in simulation, the group used the bracket's known
+geometry and the published dVRK kinematics~\cite{kazanzides2014dvrk,sawIntuitive}
+to find a good RCM placement. The goal was for the jaw tip to reach
 (i)~every point along the inside vertical corner of the L-bracket and
-(ii)~every hole in both plates \emph{from the inside}, with the jaws
-aligned to the hole axis.
+(ii)~every hole in both plates \emph{from the inside}, with the jaws lined up
+with the hole. The method has three parts: a model of the arm that can be
+solved for the joint angles needed to reach a target
+(Sections~\ref{sec:kin}--\ref{sec:ik}), a score that rates a candidate
+placement (Section~\ref{sec:score}), and a search that tries many placements
+and keeps the best (Section~\ref{sec:search}).
 
-The analysis has three stages: modelling the PSM and solving its inverse
-kinematics under the RCM constraint
-(Sections~\ref{sec:kin}--\ref{sec:ik}), scoring a candidate RCM placement
-(Section~\ref{sec:score}), and searching globally over placements
-(Section~\ref{sec:search}).
-
-\subsection{Frames and Notation}\label{sec:frames}
-Let $\{B\}$ be the bracket frame: the STL frame scaled to metres, with
-$\hat{\mathbf z}$ up and the table at $z=z_0=0$. Let $\{R\}$ be the RCM
-frame, with its origin at the RCM and the tool shaft along
-$-\hat{\mathbf z}$ at $\mathbf q=\mathbf 0$. A placement is
+\subsection{Setup and Targets}\label{sec:targets}
+All positions are given in the bracket frame $\{B\}$, with $z$ pointing up
+and the table at $z=0$. A placement of the RCM is described by six numbers,
 \begin{equation}
-  \mathbf x=(\mathbf t,\psi,\theta_y,\theta_x)\in\mathbb R^6,
-  \qquad
-  {}^{B}\mathbf T_{R}(\mathbf x)=
-  \begin{bmatrix}\mathbf R(\mathbf x) & \mathbf t\\ \mathbf 0^\top & 1\end{bmatrix},
+  \mathbf x=(\mathbf t,\psi,\theta_y,\theta_x),
 \end{equation}
-with $\mathbf R(\mathbf x)=\mathbf R_z(\psi)\,\mathbf R_y(\theta_y)\,\mathbf R_x(\theta_x)$,
-so $\mathbf x=\mathbf 0$ is an upright RCM with the tool pointing straight
-down. Each target $k$ is a pair
-$(\mathbf p_k,\mathbf a_k)\in\mathbb R^3\times S^2$ expressed in $\{B\}$:
-$\mathbf p_k$ is the point the jaw tip must reach and $\mathbf a_k$ is the
-unit direction the jaw axis must point along. The target set
-$\mathcal T=\mathcal C\cup\mathcal H$ consists of corner points
-$\mathcal C$ and holes $\mathcal H$.
+where $\mathbf t$ is the RCM's position and the three angles rotate the arm:
+$\mathbf R(\mathbf x)=\mathbf R_z(\psi)\mathbf R_y(\theta_y)\mathbf R_x(\theta_x)$.
+With all angles zero, the tool points straight down.
 
-\subsection{Task Targets}\label{sec:targets}
-The geometry of the bracket is known from its CAD model, so the position of
-every hole and of the inside corner is known in $\{B\}$. The bracket
-consists of two \SI{4}{mm} thick vertical plates, $P_x$ (normal to $x$) and
-$P_y$ (normal to $y$), each \SI{65}{mm} tall and \SI{70}{mm} long. Let
-$\mathbf u_i$ be the outward unit normal of plate $P_i$, pointing from its
-inner face (inside the L) to its outer face.
+Each target $k$ is a point $\mathbf p_k$ that the jaw tip must reach and a
+unit direction $\mathbf a_k$ that the jaws must point along. The bracket is
+two \SI{4}{mm} thick plates, \SI{65}{mm} tall and \SI{70}{mm} long, and the
+positions of all of its features are known from the CAD model:
 \begin{itemize}
-  \item \textit{Holes} ($|\mathcal H|=421$, diameter \SI{2.7}{mm}): a
-    $15\times15$ grid at \SI{3.93}{mm} pitch on $P_x$ and a $14\times14$
-    grid at \SI{4.23}{mm} pitch on $P_y$. Each target $\mathbf p_k$ is the
-    hole centre on the inner face, with $\mathbf a_k=\mathbf u_i$, the
-    direction the jaws travel to pass through the hole from the inside.
-  \item \textit{Inside corner} ($|\mathcal C|=13$): points on the inner
-    fillet of the vertical corner edge, every \SI{5}{mm} in height from
-    $z=\SI{2.5}{mm}$ to \SI{62.5}{mm}, approached along the bisector
-    $\mathbf a_k=(\mathbf u_x+\mathbf u_y)/\lVert\mathbf u_x+\mathbf u_y\rVert$.
+  \item \textit{Holes} (421, diameter \SI{2.7}{mm}): a $15\times15$ grid on
+    one plate and a $14\times14$ grid on the other. The target is the
+    centre of the hole on the inside face, and the direction is straight
+    through the plate, outward.
+  \item \textit{Inside corner} (13 points): spaced every \SI{5}{mm} up the
+    inside corner edge, approached diagonally into the corner.
 \end{itemize}
-For collision checking, each plate is represented by its axis-aligned
-bounding box $\mathcal B_i$ with corners $\mathbf b_i^{\min}$ and
-$\mathbf b_i^{\max}$. The holes are much smaller than the tool shaft, so
-treating the plates as solid has no effect on shaft clearance.
+For collision checks, each plate is treated as a solid box. The holes are much
+smaller than the tool shaft, so this makes no practical difference.
 
-\subsection{PSM Kinematic Model}\label{sec:kin}
-The PSM is modelled with joints
-$\mathbf q=(q_1,\dots,q_6)$: outer yaw, outer pitch, insertion, tool roll,
-wrist pitch and wrist yaw. The jaws are treated as closed. The geometry
-is the dVRK modified (Craig~\cite{craig2005}) Denavit--Hartenberg (DH)
-table~\cite{sawIntuitive} for the PSM and the Large Needle Driver, listed in
-Table~\ref{tab:dh}, where
+\subsection{Arm Model}\label{sec:kin}
+The PSM has six joints,
+$\mathbf q=(q_1,\dots,q_6)$: yaw and pitch swing the shaft about the RCM,
+insertion $q_3$ slides it in and out, roll $q_4$ spins it, and the wrist
+pitch and yaw ($q_5,q_6$) bend the jaws at the end. The jaws are treated as
+closed. The arm's dimensions come from the dVRK Denavit--Hartenberg (DH)
+table~\cite{craig2005,sawIntuitive} in Table~\ref{tab:dh}. Each row describes
+how one joint is placed relative to the previous one, as a fixed transform
 \begin{equation}
   {}^{i-1}\mathbf T_i=\mathbf R_x(\alpha_{i-1})\,\mathbf D_x(a_{i-1})\,
-  \mathbf R_z(\theta_i)\,\mathbf D_z(d_i).
+  \mathbf R_z(\theta_i)\,\mathbf D_z(d_i),
 \end{equation}
+where $\mathbf R$ is a rotation and $\mathbf D$ a translation along the named
+axis.
 
 \begin{table}[t]
 \centering
-\caption{dVRK PSM modified DH parameters and joint ranges~\cite{sawIntuitive}.
+\caption{dVRK PSM DH parameters and joint ranges~\cite{sawIntuitive}.
 Lengths in m.}
 \label{tab:dh}
 \footnotesize
@@ -99,277 +79,165 @@ $i$ & Joint & $\alpha_{i-1}$ & $a_{i-1}$ & $\theta_i$ & $d_i$ & Range\\
 \end{tabular}
 \end{table}
 
-\textit{Product of exponentials.} For computation, the DH chain is converted
-once into the product-of-exponentials (PoE) form~\cite{lynch2017modern}. The
-zero-configuration frames
-${}^{0}\mathbf T_i(\mathbf 0)=\prod_{j\le i}{}^{j-1}\mathbf T_j(\mathbf 0)$
-give each joint axis $\boldsymbol\omega_i$ (the frame's $\hat{\mathbf z}$)
-and a point on it, $\mathbf r_i$ (the frame origin). The space screw axes
-are
+\textit{Forward kinematics.} Multiplying the six transforms gives the pose of
+the jaws for any set of joint values:
 \begin{equation}
-  \mathcal S_i=\begin{cases}
-    \big(\boldsymbol\omega_i,\;-\boldsymbol\omega_i\times\mathbf r_i\big) & \text{revolute},\\
-    \big(\mathbf 0,\;\boldsymbol\omega_i\big) & \text{prismatic},
-  \end{cases}
+  \mathbf T(\mathbf q)={}^{0}\mathbf T_1\,{}^{1}\mathbf T_2\cdots{}^{5}\mathbf T_6
+  =\begin{bmatrix}\mathbf R(\mathbf q)&\mathbf p(\mathbf q)\\\mathbf 0^\top&1\end{bmatrix}.
 \end{equation}
-and the forward kinematics are
+The jaws point along $\hat{\mathbf a}(\mathbf q)$, the second column of
+$\mathbf R(\mathbf q)$, and the tip is one jaw length
+($\ell=\SI{10.2}{mm}$) further along:
 \begin{equation}
-  \mathbf T(\mathbf q)=e^{[\mathcal S_1]q_1}e^{[\mathcal S_2]q_2}\cdots e^{[\mathcal S_6]q_6}\,\mathbf M,
-  \qquad \mathbf M={}^{0}\mathbf T_6(\mathbf 0).
-\end{equation}
-For a revolute screw $(\boldsymbol\omega,\mathbf v)$, the exponential is
-evaluated in closed form by Rodrigues' formula,
-\begin{equation}
-\begin{aligned}
-  e^{[\mathcal S]\theta}&=\begin{bmatrix}e^{[\boldsymbol\omega]\theta} & \mathbf G(\theta)\mathbf v\\ \mathbf 0^\top&1\end{bmatrix},\\
-  e^{[\boldsymbol\omega]\theta}&=\mathbf I+\sin\theta\,[\boldsymbol\omega]+(1-\cos\theta)[\boldsymbol\omega]^2,\\
-  \mathbf G(\theta)&=\mathbf I\theta+(1-\cos\theta)[\boldsymbol\omega]+(\theta-\sin\theta)[\boldsymbol\omega]^2,
-\end{aligned}
-\end{equation}
-where $[\cdot]$ is the skew-symmetric matrix. Over 2000 random
-configurations, the PoE and direct DH evaluations agree to
-$1.7\times10^{-15}$.
-
-\textit{Jaw tip and RCM.} With $\mathbf T(\mathbf q)=(\mathbf R(\mathbf q),\mathbf p(\mathbf q))$,
-the jaw pointing axis is the last frame's $\hat{\mathbf y}$ axis. The tip
-lies one jaw length $\ell=\SI{10.2}{mm}$ along it:
-\begin{equation}
-  \hat{\mathbf a}(\mathbf q)=\mathbf R(\mathbf q)\hat{\mathbf e}_y,
-  \qquad
   \mathbf p_{\mathrm{tip}}(\mathbf q)=\mathbf p(\mathbf q)+\ell\,\hat{\mathbf a}(\mathbf q).
 \end{equation}
-The axes of $q_1$ and $q_2$ intersect at the origin of $\{R\}$, and $q_3$
-translates along a line through that point. The wrist point is therefore
+In the code, the same chain is written in the equivalent
+product-of-exponentials form~\cite{lynch2017modern}, which makes the
+derivatives below cheap to compute. The two forms agree to within
+$10^{-15}$.
+
+\textit{The RCM constraint.} Because yaw and pitch both rotate about the RCM
+and insertion slides along a line through it, the end of the shaft (the
+wrist) is always
 \begin{equation}
   \mathbf p_w(\mathbf q)=(q_3-\SI{15.6}{mm})\,\hat{\mathbf s}(q_1,q_2),
 \end{equation}
-where $\hat{\mathbf s}$ is the unit shaft direction. Every configuration
-passes the shaft through the RCM, which is the mechanical origin of the
-approach-direction limits. Only the wrist ($q_5,q_6$) and roll ($q_4$) can
-tilt the jaws away from the line joining the RCM to the wrist.
+where $\hat{\mathbf s}$ is the direction the shaft points. In other words,
+the shaft always passes through the RCM. Only the wrist and roll can angle
+the jaws away from that line, and the wrist bends at most $80^\circ$. This is
+what limits the directions from which a target can be approached.
 
-\textit{Jacobian.} The space Jacobian is
-\begin{equation}
-  \mathbf J_s(\mathbf q)=\big[\mathcal S_1\;\;\mathrm{Ad}_{\mathbf T_1}\mathcal S_2\;\;\cdots\;\;\mathrm{Ad}_{\mathbf T_5}\mathcal S_6\big],
-\end{equation}
-where $\mathbf T_i=\prod_{j\le i}e^{[\mathcal S_j]q_j}$
-and $\mathrm{Ad}_{(\mathbf R,\mathbf p)}=\left[\begin{smallmatrix}\mathbf R&\mathbf 0\\{[\mathbf p]}\mathbf R&\mathbf R\end{smallmatrix}\right]$.
-Splitting $\mathbf J_s$ into angular rows $\mathbf J_\omega$ and linear rows
-$\mathbf J_v$, the velocity of the tip point is
-$\dot{\mathbf p}_{\mathrm{tip}}=\mathbf v_s+\boldsymbol\omega_s\times\mathbf p_{\mathrm{tip}}$,
-so
-\begin{equation}
-  \mathbf J_{\mathrm{tip}}=\mathbf J_v-[\mathbf p_{\mathrm{tip}}]\,\mathbf J_\omega .
-\end{equation}
+\textit{Jacobian.} The Jacobian $\mathbf J(\mathbf q)$ is a $6\times6$ matrix
+that says how fast the tip moves and turns for a small change in each joint.
+It is what the solver below uses to decide which way to move the joints.
 
-\subsection{Cone-Constrained Inverse Kinematics}\label{sec:ik}
-For a target $(\mathbf p,\mathbf a)$ expressed in $\{R\}$, the IK seeks
-$\mathbf q\in\mathcal Q$ such that
+\subsection{Solving for the Joint Angles}\label{sec:ik}
+Inverse kinematics (IK) is the reverse problem: given a target
+$(\mathbf p,\mathbf a)$, find joint values $\mathbf q$ within the joint
+limits such that
 \begin{equation}
   \mathbf p_{\mathrm{tip}}(\mathbf q)=\mathbf p,
   \qquad
-  \angle\big(\hat{\mathbf a}(\mathbf q),\mathbf a\big)\le\gamma,
+  \angle\big(\hat{\mathbf a}(\mathbf q),\mathbf a\big)\le\gamma .
 \end{equation}
-where $\gamma=20^\circ$ is the approach cone half-angle and $\mathcal Q$ is
-the box of joint limits. Rotation of the jaws about their own axis is left
-free, which is acceptable for pushing a stiff segment straight through a
-hole. The problem therefore has five equality constraints (three for
-position, two for direction) on six joints, plus the slack given by the
-cone.
+The jaws do not have to point exactly along $\mathbf a$, only within a cone
+of half-angle $\gamma=20^\circ$ around it. Spinning the jaws about their own
+axis is allowed freely, since that does not matter when pushing a stiff
+segment straight through a hole.
 
-\textit{Cone projection.} At each iterate, the target direction is the
-closest unit vector to the current jaw axis that lies inside the cone:
+The solver starts from a guess in which the shaft is aimed at the target with
+the wrist straight, then improves it step by step. At each step it measures
+two errors: how far the tip is from the target,
+$\mathbf e_p=\mathbf p-\mathbf p_{\mathrm{tip}}$, and how far the jaw axis
+is from the nearest direction inside the cone, $\mathbf e_\omega$. Stacking
+these into one error vector $\mathbf e$, the joints are updated with the
+damped least-squares step~\cite{wampler1986dls}
 \begin{equation}
-  \hat{\mathbf a}^\ast=\begin{cases}
-    \hat{\mathbf a}, & \angle(\hat{\mathbf a},\mathbf a)\le\gamma,\\
-    \cos\gamma\,\mathbf a+\sin\gamma\,\hat{\mathbf w}, & \text{otherwise,}
-  \end{cases}
-\end{equation}
-where $\hat{\mathbf w}$ is the unit vector along
-$\hat{\mathbf a}-(\hat{\mathbf a}\cdot\mathbf a)\mathbf a$, i.e.\ the
-component of the current axis perpendicular to $\mathbf a$.
-This lets the solver use the cone's slack to reduce wrist bending.
-
-\textit{Damped least squares.} The errors are
-$\mathbf e_\omega=\hat{\mathbf a}\times\hat{\mathbf a}^\ast$ and
-$\mathbf e_p=\mathbf p-\mathbf p_{\mathrm{tip}}$. The roll component is
-removed from the orientation rows with
-$\boldsymbol\Pi=\mathbf I-\hat{\mathbf a}\hat{\mathbf a}^\top$, and the
-rotational and translational rows are scaled by
-$\mathbf W=\operatorname{diag}(0.01\,\mathbf I_3,\mathbf I_3)$, so that
-\SI{1}{rad} of axis error weighs the same as \SI{10}{mm} of position error.
-The weighted task Jacobian and error are
-\begin{equation}
-  \tilde{\mathbf J}=\mathbf W\begin{bmatrix}\boldsymbol\Pi\,\mathbf J_\omega\\ \mathbf J_{\mathrm{tip}}\end{bmatrix},
-  \qquad
-  \tilde{\mathbf e}=\mathbf W\begin{bmatrix}\mathbf e_\omega\\ \mathbf e_p\end{bmatrix},
-\end{equation}
-and the damped least-squares update~\cite{wampler1986dls} is
-\begin{equation}
-  \Delta\mathbf q=\big(\tilde{\mathbf J}^\top\tilde{\mathbf J}+\lambda\mathbf I\big)^{-1}\tilde{\mathbf J}^\top\tilde{\mathbf e},
+  \Delta\mathbf q=\big(\mathbf J^\top\mathbf J+\lambda\mathbf I\big)^{-1}\mathbf J^\top\mathbf e,
   \qquad \lambda=10^{-4}.
 \end{equation}
-Steps are clipped to \SI{0.3}{rad} per revolute joint and \SI{30}{mm} for
-insertion. Joint limits are enforced by projecting onto the limit box,
-$\mathbf q\leftarrow\Pi_{\mathcal Q}(\mathbf q+\Delta\mathbf q)$.
+This is the joint change that best reduces the error. The small $\lambda$
+keeps the step from blowing up when the arm is near a configuration where
+some motion is impossible. After each step, any joint pushed past its limit
+is clamped back to the limit. One run uses 60 steps. It is repeated from four
+different roll angles, and the best result is kept.
 
-\textit{Initialisation and restarts.} The initial guess aims the shaft at an
-estimated wrist location $\mathbf p_w^\ast=\mathbf p-(\ell+\SI{9}{mm})\mathbf a$,
-with the wrist straight: $q_3=\lVert\mathbf p_w^\ast\rVert$, followed by 15
-Gauss--Newton steps on $(q_1,q_2,q_3)$ so that
-$\mathbf p_w(\mathbf q)=\mathbf p_w^\ast$. Because roll and the wrist are
-coupled, the solve is restarted from
-$q_4\in\{0,\pi/2,-\pi/2,0.95\pi\}$. The solution kept is the one minimising
-$10^3\lVert\mathbf e_p\rVert+\max\!\big(0,\angle(\hat{\mathbf a},\mathbf a)-\gamma\big)$,
-with the position error in metres and the angle in degrees. A target is
-counted as reached when $\lVert\mathbf e_p\rVert<\varepsilon_p=\SI{0.5}{mm}$
-and the angle lies inside the cone.
-
-\textit{Validation.} The solver was checked by round trips on 2000 random
-joint configurations within limits. Recovering the forward-kinematics tip
-and exact axis ($\gamma=0$) succeeded in 99.9\% of cases. With the axis
-perturbed by $\sim8^\circ$ and $\gamma=20^\circ$, it succeeded in 99.7\%. The
-few failures are near joint limits, so reachability is if anything slightly
-under-counted.
+A target counts as \emph{reached} if the tip ends up within \SI{0.5}{mm}
+of it and the jaws point inside the cone. As a check, the solver was
+asked to reach 2000 random poses that the arm was known to be able to reach.
+It found 99.7--99.9\% of them, so if anything it slightly under-counts
+reachability.
 
 \subsection{Scoring a Placement}\label{sec:score}
-For a placement $\mathbf x$, each target is mapped into the RCM frame:
+To rate a placement $\mathbf x$, every target is first rewritten relative to
+the RCM:
 \begin{equation}
   \mathbf p'_k=\mathbf R(\mathbf x)^\top(\mathbf p_k-\mathbf t),
   \qquad
   \mathbf a'_k=\mathbf R(\mathbf x)^\top\mathbf a_k .
 \end{equation}
-Targets that are obviously infeasible are discarded before running the IK:
-those with $\lVert\mathbf p'_k\rVert$ outside
-$[q_3^{\min}-\SI{3}{cm},\,q_3^{\max}+\SI{3}{cm}]$, and those with
-$\angle(\mathbf p'_k,\mathbf a'_k)\ge95^\circ+\gamma$, which would require
-the tool to point back toward the RCM.
+The IK is then solved for each target. To leave a safety margin, every
+rotary joint is kept \SI{0.05}{rad} inside its limit, and insertion is
+kept at least \SI{40}{mm}. A target counts as reachable, $s_k=1$, only if
+the IK succeeds and all of the following hold:
+\begin{itemize}
+  \item the shaft (a \SI{4.2}{mm} radius cylinder from the RCM to the
+    wrist) does not pass through either plate;
+  \item the wrist and jaws (\SI{2.5}{mm} radius) do not pass through a
+    plate, ignoring the last \SI{3}{mm} at the tip, which is meant to touch
+    the target;
+  \item no part of the tool goes below the table;
+  \item the RCM is at least \SI{2}{cm} from the bracket and the table.
+\end{itemize}
+Otherwise $s_k=0$.
 
-\textit{Tightened limits.} The IK runs with the limits $\mathcal Q_\delta$:
-each revolute limit is pulled in by $\delta=\SI{0.05}{rad}$, and insertion
-is constrained to $q_3\in[\SI{40}{mm},\SI{240}{mm}]$ so the wrist is
-clear of a cannula.
-
-\textit{Collision model.} The shaft is the segment
-$[\mathbf o,\mathbf p_w]$ from the RCM to the wrist, and the wrist and jaws
-form the segment $[\mathbf p_w,\,\mathbf p_{\mathrm{tip}}-c\,\hat{\mathbf a}]$.
-The last $c=\SI{3}{mm}$ of the jaws is excluded so that touching the target
-surface is not counted as a collision. Both segments are mapped to $\{B\}$
-and tested against the plate boxes $\mathcal B_i$ inflated by the tool
-radius ($r_s=\SI{4.2}{mm}$ for the shaft, $r_w=\SI{2.5}{mm}$ for the
-wrist). An inflated box contains the Minkowski sum of the box and a ball of
-radius $r$, so the test is conservative. For a segment
-$\mathbf s(\tau)=\mathbf a_0+\tau\mathbf d$, $\tau\in[0,1]$, the slab
-method~\cite{kay1986raytracing} computes, per axis $i$,
-\begin{equation}
-\begin{aligned}
-  \tau_i^{-}&=\frac{b_i^{\min}-a_{0,i}}{d_i},\qquad
-  \tau_i^{+}=\frac{b_i^{\max}-a_{0,i}}{d_i},\\
-  \tau_{\mathrm{in}}&=\max_i\min(\tau_i^-,\tau_i^+),\quad
-  \tau_{\mathrm{out}}=\min_i\max(\tau_i^-,\tau_i^+),
-\end{aligned}
-\end{equation}
-and reports a hit when
-$\tau_{\mathrm{in}}\le\tau_{\mathrm{out}}$, $\tau_{\mathrm{out}}\ge0$ and
-$\tau_{\mathrm{in}}\le1$. The table is the half-space $z<z_0$: the RCM and
-wrist must satisfy $z\ge z_0+r_s$, and the jaw end must satisfy
-$z\ge z_0+r_w$. Finally, the RCM itself must be clear of the bracket and the
-table:
-\begin{equation}
-\begin{gathered}
-  \min_i\big\lVert\max(\mathbf 0,\,\mathbf b_i^{\min}-\mathbf t,\,\mathbf t-\mathbf b_i^{\max})\big\rVert\ge\SI{2}{cm},\\
-  t_z\ge z_0+\SI{2}{cm},
-\end{gathered}
-\end{equation}
-where the $\max$ is taken element-wise.
-
-\textit{Objective.} Let $s_k(\mathbf x)\in\{0,1\}$ indicate that target $k$
-passes the IK and every collision test. Let
-$\bar q_i=(q_i-q_i^{\min})/(q_i^{\max}-q_i^{\min})$ be each joint's
-normalised position in its range. The joint-limit margin of the solution
-is then $m_k=\min_i\min(\bar q_i,1-\bar q_i)\in[0,\tfrac12]$. The placement
-score is
+The placement's score adds up what fraction of corner points and holes are
+reachable:
 \begin{equation}\label{eq:objective}
-\begin{aligned}
-  J(\mathbf x)={}&
-  \frac{w_c}{|\mathcal C|}\sum_{k\in\mathcal C}s_k
-  +\frac{1}{|\mathcal H|}\sum_{k\in\mathcal H}s_k\\
-  &+w_m\frac{\sum_k s_k m_k}{\sum_k s_k},
-\end{aligned}
+  J(\mathbf x)=
+  2\cdot\frac{\#\text{corner points reached}}{13}
+  +\frac{\#\text{holes reached}}{421}
+  +0.02\,\bar m .
 \end{equation}
-with $w_c=2$ and $w_m=0.02$, so full coverage gives $J\approx3$. One corner
-point ($2/13\approx0.15$) outweighs any number of holes it might trade off
-against in practice. The margin term is bounded by $w_m/2=0.01$, roughly
-the value of four holes, so it acts as a soft tie-break that pushes
-solutions away from joint limits.
+The corner is weighted twice because it is essential to the task. The last
+term is a small bonus for keeping joints away from their limits. Here
+$\bar m$ is the average, over reached targets, of how far the closest joint
+is from a limit, as a fraction of its range: 0 at a limit, 0.5 at the middle.
+Reaching everything gives a score of just over 3.
 
-\subsection{Global Search over Placements}\label{sec:search}
-The placement is found by solving
+\subsection{Searching for the Best Placement}\label{sec:search}
+Because the score counts targets, it jumps in steps as the placement moves.
+Methods that follow a slope therefore do not work, so the group used
+differential evolution~\cite{storn1997de} from SciPy~\cite{virtanen2020scipy}.
+It keeps a population of 120 candidate placements spread over the search
+range: the RCM within \SI{30}{cm} of the bracket and above the table, any
+rotation about the vertical, and tilts up to a limit $\Theta$. Each
+generation, every candidate is challenged by a new one, built by taking the
+current best and moving it along the difference between two other random
+candidates:
 \begin{equation}
-  \mathbf x^\ast=\arg\max_{\mathbf x\in\mathcal X}J(\mathbf x),
+  \mathbf v=\mathbf x_{\mathrm{best}}+F\,(\mathbf x_{r_1}-\mathbf x_{r_2}),
+  \qquad F\in[0.5,1).
 \end{equation}
-where $\mathcal X$ allows
-$t_x,t_y\in[-0.3,0.3]$\,m, $t_z\in[0,0.3]$\,m,
-$\psi\in[-180^\circ,180^\circ]$ and $\theta_x,\theta_y\in[-\Theta,\Theta]$.
-Because $J$ is piecewise constant in $\mathbf x$ (it counts indicator
-functions), gradient methods do not apply. Differential
-evolution~\cite{storn1997de} as implemented in SciPy~\cite{virtanen2020scipy}
-is used instead, with strategy \texttt{best1bin}. A population of
-$N_p=20\cdot6=120$ placements is initialised by Latin hypercube sampling. In
-each generation, every member $\mathbf x_i$ produces a mutant from the
-current best and two random members $r_1\neq r_2$:
-\begin{equation}
-  \mathbf v_i=\mathbf x_{\mathrm{best}}+F\,(\mathbf x_{r_1}-\mathbf x_{r_2}),
-  \qquad F\sim\mathcal U[0.5,1),
-\end{equation}
-followed by binomial crossover with rate $\mathrm{CR}=0.7$,
-\begin{equation}
-  u_{i,j}=\begin{cases}v_{i,j}, & \rho_j\le\mathrm{CR}\ \text{or}\ j=j_{\mathrm{rand}},\\ x_{i,j}, & \text{otherwise,}\end{cases}
-\end{equation}
-and greedy selection,
-$\mathbf x_i\leftarrow\mathbf u_i$ if $J(\mathbf u_i)\ge J(\mathbf x_i)$.
-Whole generations are evaluated in one vectorised batch, so all IK solves
-for $120\times|\mathcal T|$ (placement, target) pairs run together.
+Some of the new candidate's six numbers are swapped back with the original
+candidate's, and whichever of the two scores higher survives. Over about 60
+generations, the population closes in on the best region.
 
-To keep the search fast, it optimises a surrogate $\tilde J$. The surrogate
-uses every third hole plus all corner points (154 targets), 30 IK
-iterations and two roll seeds. The best placement is then re-scored with the
-full $J$ on all 434 targets, using 100 iterations and all four seeds. The
-search runs for at most 60 generations.
+For speed, the search scores candidates against every third hole plus all
+corner points. The winner is then re-scored on all 434 targets.
 
 \subsection{Results}\label{sec:results}
-Two searches were run (Table~\ref{tab:placement}). In placement~A the tilts
-were limited to $\Theta=30^\circ$; in placement~B they were limited only to
-$\Theta=70^\circ$. The tool-axis tilt is the angle between
-$\mathbf R(\mathbf x)\hat{\mathbf e}_z$ and the vertical. Both placements
-reach all 13 corner points and all 421 holes. Every one of the 434 joint
-solutions also lies within the narrower joint limits of the AMBF PSM model
-(Table~\ref{tab:joints}), which is needed for the simulation test.
+Two searches were run: placement~A with the tilt limited to
+$\Theta=30^\circ$, and placement~B allowing up to $70^\circ$
+(Table~\ref{tab:placement}). Both reach all 13 corner points and all 421
+holes. Every joint solution for placement~A also fits within the slightly
+narrower joint limits of the AMBF simulator's PSM model
+(Table~\ref{tab:joints}), so the result can be tested directly in
+simulation.
 
 \begin{table}[t]
 \centering
-\caption{Optimised RCM placements in the bracket frame.}
+\caption{Best RCM placements found, in the bracket frame.}
 \label{tab:placement}
 \footnotesize
 \begin{tabular}{@{}lcc@{}}
 \hline
  & A ($\Theta=30^\circ$) & B ($\Theta=70^\circ$)\\
 \hline
-$\mathbf t$ (mm)            & $(82.6,\,-87.3,\,127.8)$ & $(117.7,\,-81.1,\,76.1)$\\
+RCM position (mm)           & $(82.6,\,-87.3,\,127.8)$ & $(117.7,\,-81.1,\,76.1)$\\
 $\psi,\theta_y,\theta_x$ ($^\circ$) & $-40.7,\ 27.1,\ 5.1$ & $-126.2,\ -23.4,\ -69.5$\\
-Tool-axis tilt              & $27.6^\circ$ & $71.2^\circ$\\
+Tool tilt from vertical     & $27.6^\circ$ & $71.2^\circ$\\
 Corner / holes reached      & 13/13, 421/421 & 13/13, 421/421\\
-Mean / min margin $m_k$     & 0.314 / 0.167 & 0.331 / 0.167\\
+Joint margin (mean / min)   & 0.314 / 0.167 & 0.331 / 0.167\\
 Score $J$                   & 3.0063 & 3.0066\\
-Evaluations / time          & 3720 / 269\,s & 4920 / 382\,s\\
 \hline
 \end{tabular}
 \end{table}
 
 \begin{table}[t]
 \centering
-\caption{Joint ranges used by placement A over all 434 targets, against the
-dVRK and AMBF limits (rad; insertion in m).}
+\caption{Joint ranges used by placement A across all 434 targets, compared
+with the dVRK and AMBF limits (rad; insertion in m).}
 \label{tab:joints}
 \footnotesize
 \setlength{\tabcolsep}{4pt}
@@ -387,27 +255,27 @@ Wrist yaw $q_6$   & $[-0.567,\,0.562]$  & $\pm1.396$ & $\pm1.571$\\
 \end{tabular}
 \end{table}
 
-\begin{figure*}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/psm1_tilt30_coverage.png}
-\caption{Reachability of placement A. Left and centre: hole maps of the two
-plates, with reached targets in green; squares are the inside-corner points.
-Right: the plate collision boxes, the RCM and a sample of IK solutions
-(blue: shaft from the RCM to the wrist; orange: wrist and jaws).}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/coverage.png}
+    \caption{Reachability of placement A. Left and centre: hole maps of the
+    two plates, with reached targets in green; squares are the inside-corner
+    points. Right: the plates, the RCM and a sample of tool poses (blue:
+    shaft; orange: wrist and jaws).}
 \label{fig:coverage}
-\end{figure*}
+\end{figure}
 
-\textit{Sensitivity to the approach cone.} Table~\ref{tab:cone} re-scores
-both placements as $\gamma$ is tightened. Placement~A keeps full coverage
-down to $\gamma=5^\circ$. At $\gamma=0^\circ$ (jaw axis exactly on the hole
-axis) it still reaches 12/13 corner points and 412/421 holes; the losses are
-shaft collisions with the opposite plate. Placement~B starts losing holes at
-$5^\circ$, all to the table constraint, because its nearly horizontal
-shaft runs close to the table.
+\textit{How strict can the alignment be?} Table~\ref{tab:cone} repeats the
+check with a narrower cone. Placement~A still reaches everything when the
+jaws must be within $5^\circ$ of the hole axis. Even at exact alignment it
+reaches 12 of 13 corner points and 412 of 421 holes; the shaft clips the
+other plate on the rest. Placement~B starts failing at $5^\circ$, because its
+nearly horizontal shaft runs too close to the table.
 
 \begin{table}[t]
 \centering
-\caption{Targets reached (corner / holes) versus approach cone half-angle.}
+\caption{Targets reached (corner / holes) as the allowed jaw misalignment
+$\gamma$ shrinks.}
 \label{tab:cone}
 \footnotesize
 \begin{tabular}{@{}ccc@{}}
@@ -423,33 +291,10 @@ $0^\circ$  & 12 / 412 & 12 / 409\\
 \end{tabular}
 \end{table}
 
-\textit{Choice of placement.} The two placements have essentially equal
-scores ($\Delta J=3\times10^{-4}$, which comes from the margin term). B,
-however, tilts the RCM frame by $71^\circ$ with the RCM only \SI{76}{mm}
-above the table. That relies on the PSM's arm linkage, which this model
-does not check for collisions, fitting into that space. Placement~A is
-therefore chosen for the first PSM. It also degrades more gracefully as the
-approach tolerance tightens, and it keeps every joint at least 16.7\% of its
-range away from a limit.
-
-\subsection{Limitations and Next Steps}\label{sec:limits}
-The model makes several simplifications:
-\begin{itemize}
-  \item Only the tool shaft and wrist are checked for collisions. The PSM's
-    own linkage, the setup joints, the cannula and the second arm are not
-    modelled.
-  \item The jaw axis stands in for the direction of the held segment, so
-    grasp offsets of the toothpick are ignored.
-  \item The inflated-box collision test is conservative, so near-miss
-    poses may be rejected.
-  \item The IK is a local method, which under-counts reachable targets
-    slightly.
-  \item The table is assumed to be the plane of the bracket base.
-\end{itemize}
-The next steps are to:
-\begin{itemize}
-  \item Place PSM1 at placement~A in AMBF and drive it to the IK solutions
-    to check the analysis against the simulator.
-  \item Extend $J$ to a second PSM by adding arm--arm clearance and the
-    region in which the two arms hand the segment over.
-\end{itemize}
+\textit{Choice of placement.} The two placements score almost the same.
+Placement~B, however, tips the arm $71^\circ$ over with the RCM only
+\SI{76}{mm} above the table. The rest of the arm's body would have to fit in
+that space, and this model does not check it for collisions. Placement~A
+was therefore chosen for the first PSM. It also copes better with stricter
+alignment, and it keeps every joint at least 16.7\% of its range away from
+its limit.
