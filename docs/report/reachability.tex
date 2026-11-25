@@ -1,7 +1,7 @@
 % ============================================================================
 % PSM placement and reachability analysis (Task 1 needle L-bracket)
 % Included from report.tex with \input{reachability}.
-% Code: scripts/reachability/{extract_bracket_targets,psm_kinematics,place_psm}.py
+% Code: scripts/reachability/{psm_kinematics,place_psm}.py
 % Numbers: results/reachability/{psm1_tilt30,psm1}/placement.yaml
 % ============================================================================
 \section{PSM Placement and Reachability Analysis}\label{sec:reach}
@@ -17,8 +17,7 @@ simulation is involved. The requirement is that the jaw tip must reach
 (ii)~every hole in both plates \emph{from the inside}, with the jaws
 aligned to the hole axis.
 
-The analysis has four stages: extracting targets from the bracket mesh
-(Section~\ref{sec:targets}), modelling the PSM and solving its inverse
+The analysis has three stages: modelling the PSM and solving its inverse
 kinematics under the RCM constraint
 (Sections~\ref{sec:kin}--\ref{sec:ik}), scoring a candidate RCM placement
 (Section~\ref{sec:score}), and searching globally over placements
@@ -44,72 +43,28 @@ unit direction the jaw axis must point along. The target set
 $\mathcal T=\mathcal C\cup\mathcal H$ consists of corner points
 $\mathcal C$ and holes $\mathcal H$.
 
-\subsection{Target Extraction from the Bracket Mesh}\label{sec:targets}
-The STL is a triangle set $\{\Delta_j\}$ with unit normals $\mathbf n_j$,
-centroids $\mathbf c_j$ and areas $A_j$. All features are detected from the
-mesh rather than hard-coded, so the pipeline can be re-run if the bracket
-changes.
-
-\textit{Plates.} Every triangle with
-$|\mathbf n_j\!\cdot\!\hat{\mathbf e}_i|\ge 0.999$ for
-$i\in\{x,y\}$ adds its area $A_j$ to the bin
-$\big(i,\operatorname{sgn}(\mathbf n_j\!\cdot\!\hat{\mathbf e}_i),\,
-\mathbf c_j\!\cdot\!\hat{\mathbf e}_i\big)$. The four largest bins form two
-pairs of parallel faces, one plate normal to $x$ ($P_x$) and one normal to
-$y$ ($P_y$). For plate $P_i$, the face nearer the mesh bounding-box centre is
-the inner face, at coordinate $h_i^{\mathrm{in}}$. The outer face is at
-$h_i^{\mathrm{out}}$, and the outward normal is
-$\mathbf u_i=\operatorname{sgn}(h_i^{\mathrm{out}}-h_i^{\mathrm{in}})\,\hat{\mathbf e}_i$.
-Both plates are \SI{4}{mm} thick, \SI{65}{mm} tall and \SI{70}{mm} long.
-For collisions, each plate is replaced by the axis-aligned box
-$\mathcal B_i$: the mesh bounding box with its $i$ coordinate restricted to
-$[h_i^{\mathrm{in}},h_i^{\mathrm{out}}]$.
-
-\textit{Holes.} The hole walls of $P_i$ are the triangles that lie inside
-the plate slab with $|\mathbf n_j\!\cdot\!\hat{\mathbf e}_i|<10^{-3}$. These
-are split into connected components of the triangle--vertex adjacency graph,
-and each component is one hole. In-plane vertex coordinates $(u_l,v_l)$ of a
-component are fitted with an algebraic circle~\cite{kasa1976circle} by linear
-least squares,
-\begin{equation}
-  \min_{\boldsymbol\beta}\sum_l\Big(\beta_1u_l+\beta_2v_l+\beta_3-(u_l^2+v_l^2)\Big)^2,
-\end{equation}
-which gives the centre $(c_u,c_v)=(\beta_1/2,\beta_2/2)$ and radius
-$r=\sqrt{\beta_3+c_u^2+c_v^2}$. A component is accepted if its RMS geometric
-residual is at most \SI{0.05}{mm} and $0.5\le 2r\le\SI{20}{mm}$. The target
-is the hole centre on the inner face, approached along the outward normal:
-\begin{equation}
-  \mathbf p_k=h_i^{\mathrm{in}}\hat{\mathbf e}_i+c_u\hat{\mathbf e}_u+c_v\hat{\mathbf e}_v,
-  \qquad \mathbf a_k=\mathbf u_i .
-\end{equation}
-This yields $|\mathcal H|=421$ holes of diameter \SI{2.7}{mm}: a
-$15\times15$ grid at \SI{3.93}{mm} pitch on $P_x$ and a $14\times14$ grid at
-\SI{4.23}{mm} pitch on $P_y$.
-
-\textit{Inside corner.} The ideal corner line is
-$\boldsymbol\ell(z)=(h_x^{\mathrm{in}},h_y^{\mathrm{in}},z)$, and the
-bisector $\mathbf b=(\mathbf u_x+\mathbf u_y)/\lVert\mathbf u_x+\mathbf u_y\rVert$
-points from inside the L into the corner. Because the inner corner is
-filleted, the true surface is found by casting rays
-$\mathbf o_m+\tau\mathbf b$, where
-$\mathbf o_m=\boldsymbol\ell(z_m)-(\SI{20}{mm})\,\mathbf b$ and
-$z_m=\SI{2.5}{mm}+m\cdot\SI{5}{mm}$ for $m=0,\dots,12$. Each ray is
-intersected with every triangle $(\mathbf v_0,\mathbf v_1,\mathbf v_2)$
-using the Möller--Trumbore test~\cite{moller1997raytri}. With
-$\mathbf e_1=\mathbf v_1-\mathbf v_0$, $\mathbf e_2=\mathbf v_2-\mathbf v_0$,
-$\mathbf s=\mathbf o-\mathbf v_0$, $\mathbf P=\mathbf b\times\mathbf e_2$ and
-$\mathbf Q=\mathbf s\times\mathbf e_1$, Cramer's rule gives
-\begin{equation}
-  \begin{bmatrix}\tau\\ \lambda_1\\ \lambda_2\end{bmatrix}
-  =\frac{1}{\mathbf P\cdot\mathbf e_1}
-  \begin{bmatrix}\mathbf Q\cdot\mathbf e_2\\ \mathbf P\cdot\mathbf s\\ \mathbf Q\cdot\mathbf b\end{bmatrix},
-\end{equation}
-and a hit requires $\lambda_1,\lambda_2\ge0$, $\lambda_1+\lambda_2\le1$ and
-$\tau>0$. The nearest hit $\tau^\ast$ defines the corner target
-$\mathbf p_k=\mathbf o_m+\tau^\ast\mathbf b$, $\mathbf a_k=\mathbf b$. The
-resulting $|\mathcal C|=13$ points lie on the fillet at
-$(-14.82,\,14.82)$\,mm, rather than at the sharp corner
-$(-16,\,16)$\,mm.
+\subsection{Task Targets}\label{sec:targets}
+The geometry of the bracket is known from its CAD model, so the position of
+every hole and of the inside corner is known in $\{B\}$. The bracket
+consists of two \SI{4}{mm} thick vertical plates, $P_x$ (normal to $x$) and
+$P_y$ (normal to $y$), each \SI{65}{mm} tall and \SI{70}{mm} long. Let
+$\mathbf u_i$ be the outward unit normal of plate $P_i$, pointing from its
+inner face (inside the L) to its outer face.
+\begin{itemize}
+  \item \textit{Holes} ($|\mathcal H|=421$, diameter \SI{2.7}{mm}): a
+    $15\times15$ grid at \SI{3.93}{mm} pitch on $P_x$ and a $14\times14$
+    grid at \SI{4.23}{mm} pitch on $P_y$. Each target $\mathbf p_k$ is the
+    hole centre on the inner face, with $\mathbf a_k=\mathbf u_i$, the
+    direction the jaws travel to pass through the hole from the inside.
+  \item \textit{Inside corner} ($|\mathcal C|=13$): points on the inner
+    fillet of the vertical corner edge, every \SI{5}{mm} in height from
+    $z=\SI{2.5}{mm}$ to \SI{62.5}{mm}, approached along the bisector
+    $\mathbf a_k=(\mathbf u_x+\mathbf u_y)/\lVert\mathbf u_x+\mathbf u_y\rVert$.
+\end{itemize}
+For collision checking, each plate is represented by its axis-aligned
+bounding box $\mathcal B_i$ with corners $\mathbf b_i^{\min}$ and
+$\mathbf b_i^{\max}$. The holes are much smaller than the tool shaft, so
+treating the plates as solid has no effect on shaft clearance.
 
 \subsection{PSM Kinematic Model}\label{sec:kin}
 The PSM is modelled with joints
@@ -485,8 +440,8 @@ The model makes several simplifications:
     modelled.
   \item The jaw axis stands in for the direction of the held segment, so
     grasp offsets of the toothpick are ignored.
-  \item The plates are treated as solid boxes, and the inflated-box test is
-    conservative, so near-miss poses may be rejected.
+  \item The inflated-box collision test is conservative, so near-miss
+    poses may be rejected.
   \item The IK is a local method, which under-counts reachable targets
     slightly.
   \item The table is assumed to be the plane of the bracket base.
