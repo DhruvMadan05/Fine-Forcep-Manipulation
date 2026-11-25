@@ -1,0 +1,177 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{siunitx}
+\usepackage{url}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Forceps-Based Fine Manipulation (FFM) Challenge Project Proposal}
+
+\author{\IEEEauthorblockN{Dhruv Madan}
+\IEEEauthorblockA{\textit{Robotics Engineering} \\
+\textit{Worcester Polytechnic Institute}\\
+Worcester, MA, USA \\
+dmadan@wpi.edu}
+\and
+\IEEEauthorblockN{Angelo Reade}
+\IEEEauthorblockA{\textit{Robotics Engineering} \\
+\textit{Worcester Polytechnic Institute}\\
+Worcester, MA, USA \\
+arreade@wpi.edu}
+\and
+\IEEEauthorblockN{Connor Zynda}
+\IEEEauthorblockA{\textit{Robotics Engineering} \\
+\textit{Worcester Polytechnic Institute}\\
+Worcester, MA, USA \\
+cjzynda@wpi.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+This project aims to develop a forceps-based robotic system that partially automates the needle-threading task in the Forceps-Based Fine Manipulation Challenge. The system will combine human control with path and trajectory planning to guide thread through three needle eyes in a specified order and direction. Performance will be evaluated using threading success rate, completion time, and the number of operator interventions. Robot trajectories and task outcomes will also be recorded to support future research in robotic fine manipulation and surgical thread handling.
+
+\end{abstract}
+
+\section{Background}
+The first use of a robotic manipulator in a surgical setting occurred in 1985 to assist in a CT guided brain biopsy ~\cite{morrell2021}. Since then, major advances in hardware, software, control theory, computer vision, and material science have greatly expanded the capability and reliability of robotics in medical environments. Despite these improvements, the robotic systems still face major challenges. One of these challenges is forceps based fine manipulation (FFM). FFM refers to the automation or teleoperation of robotic systems that use forceps end effectors to grasp and manipulate small and delicate objects.
+
+Current literature highlights that deformable linear objects (like thread) are difficult to detect accurately in camera images, and have deformability properties that change its shape with applied force, making manipulation very difficult ~\cite{schorp2023suturethread}. Together, these two issues make the trajectory planning process very difficult. In addition to this, occlusion of the material due to the manipulator or other items in the environment add another layer of complexity to this task ~\cite{schorp2023suturethread}.
+
+Schorp et al.~\cite{schorp2023suturethread} developed a method for reconstructing and tracking surgical thread in three dimensions despite occlusion and complex thread configurations. They applied it to autonomous suture tail-shortening, achieving a 90 percent success rate across 20 trials. Their work demonstrates progress in robotic thread manipulation, although its evaluation focused on controlling the exposed thread length rather than aligning and inserting a thread tip through a needle eye.
+
+Yu et al.~\cite{yu2023needlethreading} investigated robotic needle threading using tactile perception and reinforcement learning, reporting an average insertion success rate of 63.33 percent across their tested configurations. However, their method could not handle soft sewing threads, required one end of the thread to remain fixed during endpoint finding, and required a tactile sensor behind the needle eye. These limitations motivate further investigation of methods that can manipulate flexible thread reliably under different sensing and setup constraints.
+
+The importance in furthering research in the limitation of FFM in surgical settings is strongly influenced by the workload associated with surgical tasks. In a study of 68 surgical residents, Süer et al.~\cite{suer2025} found that simulated laparoscopic suturing imposed greater workload on less experienced residents, with mental demand and effort contributing strongly to first-year residents’ scores. This supports investigating assistance for demanding manual tasks, although it does not establish that needle-threading automation will reduce surgeon fatigue. Our project will use partially automated needle threading as a controlled task for studying precise forceps motion and flexible-thread handling, with the aim of informing future surgical automation.
+
+ 
+
+\subsection{The Project}
+This project is based on the 2026 IROS Forcep based Fine Manipulation (FFM) Challenge which has the goal of helping advance robotic manipulation of very small objects which currently is a capability that remains challenging for robotic systems. This challenge was proposed for all robots in general, but we are focusing specifically on fine manipulation for structural application with robotics. This IROS challenge has 2 separate tasks, but for the purpose of our project we will be focusing on the first task of needle threading. 
+
+\subsection{Project Motivation and Applications}
+Needle threading, although not specifically applicable to robotic and robotic assisted surgery, needle threading as a task itself demands tight tolerances; it can serve as a useful benchmark for other high precision tasks in robotic or robotic assisted surgery.
+
+Needle threading is difficult for reasons that also limit robotic surgery. The target is a small opening that must be approached in a specific direction. We are looking to implement the the challenge with the DaVinci Research Kit, DvRK, which has a remote center of motion and limits the joints of the robot. an instrument pivoting about a fixed point can only approach a target from a limited set of directions and orientations, which planning around can be applied to other real world applications. 
+
+The project also produces reusable pieces for later work, including a teleoperation dataset with labeled data, a quantitative evaluation method and a planner that can take a target position and end position instead of being specific to needle eyes.
+
+\section{Project Goals}
+As the scope of this project can be very broad, we are looking to narrow the scope in a few ways. One of those ways is to break up the goals and milestones of the project in three categories, Minimum, expected and reach goals. Minimum goals are what we expect to be the minimum outcomes of the project itself in the worst case scenario. The expected goals are what we expect to achieve and complete by the end of the project for it to be successful. Reach goals are what we hope to also achieve if all goes well on the expected goals. 
+
+
+\subsection{Minimum Goals}
+
+\begin{enumerate}
+    \item Dataset for Teleoperation of the task in simulation
+    \begin{enumerate}
+        \item The dataset will include recorded data such as the camera view, joint and end effector states and positions, ground truth of the needle and needle eyes as well as labels such as task phase, per needle eye successes and more useful data that will help with future model training;
+    \end{enumerate}
+    
+    \item Develop a quantitative evaluation method for success
+    \begin{enumerate}
+        \item Define successes per eye as the thread or simulated thread crosses the eye opening. Other evaluations include, completion time, path length, path smoothness and distance to joint limits.
+    \end{enumerate}
+    
+\end{enumerate}
+
+\subsection{Expected Goals}
+\begin{enumerate}
+    \item Task Planner for needle threading
+    \begin{enumerate}
+        \item A state machine that has knowledge of the environment and is able to determine an approach for aligning, inseritng and retracting each needle in the required order according to the task specifications.
+    \end{enumerate}
+    
+    \item Kinematic Motion Planning
+    \begin{enumerate}
+        \item develop a path of cartesian waypoints for specific actions to occur such as inserting the thread, grasping the thread, etc. Develop inverse kinematics within joint and remote center of motion limits and possible approach limitations. 
+    \end{enumerate}
+    
+    \item Partial autonomy for task components
+    \begin{enumerate}
+        \item Automate segments such as the approach to a pre-insertion pose, grasping an inserted thread, or moving between needles. The automated segments would allow an operator to control other aspects of the process such as final insertion. Automation also can be compared against full teleoperation on time and smoothness.
+    \end{enumerate}    
+\end{enumerate}
+
+
+\subsection{Reach Goals}
+\begin{enumerate}
+    \item Implementation of imitation learning of the task
+    \begin{enumerate}
+        \item Train an imitation learning model on the previously collected teleoperation dataset, starting with a single portion of the task such as threading one needle. Evaluate success rate compared with teleoperated dataset and the partial autonomy tasks.
+    \end{enumerate}
+    
+    \item Perception-based needle and eye localization in space
+    \begin{enumerate}
+        \item Identify needles by color from simulated camera images, determine location and orientation to be used to feed into the task planner in place of ground-truth poses. Report on error between ground truth and perceived location as well as how it could affect insertion and task success. 
+    \end{enumerate}
+\end{enumerate}
+
+
+\section{Methods}
+
+\subsection{Simulation Setup}
+    As outlined in the minimum project goals, the group would like to collect a dataset from teleoperation of completing the task in simulation. Inside of the simulation, the group will need to import the preexisting models of the L-bracket and needles used in the FFM challenge. The simulation will use the Asynchronus Multi-Body Framework (AMBF), an open source real time dynamic simulation tool, with a simulated da Vinci Research Kit (dVRK) arm to complete the task. Needle positions and eye orientations will be randomized in the simulation to simulate a large variety of situations for a complete and diverse dataset. 
+    \begin{itemize}
+\item{The group will use a small stiff segment such as a toothpick in place of thread for task and dynamics simplification.}
+\end{itemize}
+\subsection{Teleop and Data Collection}
+    During teleoperation, the group will collect data from each attempt at completing the task within the simulation. This data will include camera views, joint positions and velocities, end-effector positions and orientations, and the actions taken by the operator throughout each attempt. The group will also record whether each attempt was successful in completing the task. This information will be used to create a dataset that can be used for developing and evaluating the robot's autonomous task execution.
+\subsection{Task and Tracjectory Planning}
+    The group plans to implement a state machine to determine the sequence of actions required to complete the needle-threading task. This state machine will control the order in which the robot approaches, aligns with, and inserts the thread through each needle eye. To accomplish these actions, the group will generate trajectories using Cartesian waypoints to define the desired positions and orientations of the robot's end effector. Inverse kinematics will then be used to determine the joint configurations required to follow these trajectories while remaining within the robot's joint and remote center of motion constraints. The group also plans to implement partial autonomy for specific portions of the task, such as approaching a needle or moving between needles, while allowing the operator to control more precise actions such as the final insertion.
+\subsection{Evaluation}
+    The group plans to quantitatively evaluate the success rate, completion time, and path smoothness of both teleoperation and semi-autonomous motion. Success rate will be measured through recording the amount of times the robot successfully passes the thread through each needle eye and whether the robot completed the task by passing the thread through every needle eye. Completion time will be measured by recording the time required to complete each attempt, while path smoothness will be evaluated by analyzing the robot's movement throughout the task. These metrics will allow the group to compare the performance of teleoperation and partial autonomy to determine whether the implementation of autonomous movements improves the overall performance of the threading system.
+
+\input{reachability}
+
+\section{Timeline}
+\subsection*{Week 3}
+Setup Simulation Environment
+\begin{itemize}
+\item{Set up AMBF and the simulated dVRK arm.}
+\item{Import the L-bracket and needle models.}
+\item{Complete one end-to-end teleoperation run to verify the simulation environment.}
+\end{itemize}
+\subsection*{Week 4}
+Data Collection and Initial Task Planning
+\begin{itemize}
+\item{Begin collecting teleoperation data.}
+\item{Record camera views, joint and end-effector states, and task outcomes.}
+\item{Begin developing the state machine for needle threading.}
+\end{itemize}
+\subsection*{Week 5}
+Task and Trajectory Planning
+\begin{itemize}
+\item{Generate Cartesian waypoints for approaching and threading the needles.}
+\item{Implement inverse kinematics to generate valid joint configurations.}
+\item{Begin testing partially autonomous movements.}
+\end{itemize}
+\subsection*{Week 6}
+Thanksgiving Break
+\subsection*{Week 7}
+Evaluation and Reach Goals
+\begin{itemize}
+\item{Finish testing and refining the partially autonomous movements.}
+\item{Evaluate performance using success rate, completion time, and path smoothness.}
+\item{Begin exploring imitation learning if the expected goals are completed.}
+\end{itemize}
+\subsection*{Week 8}
+Buffer Week and Project Completion
+\begin{itemize}
+\item{Address any remaining implementation or simulation issues.}
+\item{Complete final performance evaluations.}
+\item{Analyze collected results and finalize project documentation.}
+\end{itemize}
+\nocite{deshpande2016microsurgical}
+\bibliographystyle{IEEEtran}
+\bibliography{refs,reachability_refs}
+
+\end{document}
+
